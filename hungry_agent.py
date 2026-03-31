@@ -162,10 +162,14 @@ def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> L
 
 
 if __name__ == "__main__":
+    import sys
     from battlesnake_server import BattlesnakeServer
 
+    if len(sys.argv) < 2:
+        print(f"Usage: python {sys.argv[0]} <port>")
+        sys.exit(1)
+
     agent = HungryAgent()
-    port = None  # TODO set your port
+    port = int(sys.argv[1])
 
     BattlesnakeServer.start_server(agent=agent, port=port)
-
