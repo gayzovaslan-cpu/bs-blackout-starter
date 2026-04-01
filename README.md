@@ -4,7 +4,7 @@
 
 # Battlesnake Blackout Starter 🐍
 
-Welcome to the official Python starter kit for [**Battlesnake Blackout**](), an AI competition hosted at the **IEEE Conference on Games (CoG) 2026** with a prize pool of **1000€**.
+Welcome to the official Python starter kit for [**Battlesnake Blackout**](https://www.tnt.uni-hannover.de/bs-blackout-2026), an AI competition hosted at the **IEEE Conference on Games (CoG) 2026** with a prize pool of **1000€** (Terms and Conditions apply).
 
 In its standard form, Battlesnake is a multiplayer game of perfect information. **Battlesnake Blackout** introduces a challenging *fog of war* mechanic. Your agent will only perceive the immediate area surrounding its head. You will need to build an AI capable of opponent modeling, trap setting, long-term strategic planning, and memory management under uncertainty.
 
