@@ -2,7 +2,7 @@ from enum import Enum
 from abc import abstractmethod
 
 from pydantic import BaseModel
-from typing import List, Optional, Self, Tuple
+from typing import List, Optional, Tuple
 
 # ---------------------------------------------------------
 # Misc Models
@@ -115,7 +115,7 @@ class Direction(str, Enum):
             return 1, 0
     
     @classmethod
-    def from_board_delta(cls, delta: Tuple[int, int]) -> Self:
+    def from_board_delta(cls, delta: Tuple[int, int]):
         for direction in cls:
             if direction.board_delta == delta:
                 return direction

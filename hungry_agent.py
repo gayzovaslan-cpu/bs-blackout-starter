@@ -55,6 +55,8 @@ class HungryAgent(BaseAgent):
         agent_state = self.agent_states[game_state.game.id]
         head = game_state.you.head
         view_radius = game_state.game.ruleset.settings.viewRadius
+        assert head is not None
+        assert view_radius is not None
         vision_mask = get_vision_mask(width=game_state.board.width, height=game_state.board.height, center=head, radius=view_radius)
 
         updated_food = []
@@ -84,6 +86,7 @@ class HungryAgent(BaseAgent):
         # first fallback (if no food or cannot reach food): follow own tail
         if result_direction is None:
             tail = game_state.you.body[-1]
+            assert tail is not None
             result_direction, _ = a_star_wrapper(obstacle_map, head, tail)
 
         # second fallback (if tail is unreachable): random move
@@ -94,7 +97,7 @@ class HungryAgent(BaseAgent):
     
     def random_fallback_move(self, game_state: GameState, obstacle_map: np.ndarray) -> Direction:
         head = game_state.you.head
-
+        assert head is not None
         clear_directions = []
         for d in Direction:
             # check out-of-bounds
@@ -122,17 +125,17 @@ class HungryAgent(BaseAgent):
 # ---------------------------------------------------------
 # A* Algorithm
 # ---------------------------------------------------------
-def a_star_wrapper(grid: np.ndarray, start: Point, goal: Point) -> Direction:
+def a_star_wrapper(grid: np.ndarray, start: Point, goal: Point) -> tuple[Direction | None, int]:
     """Converts from battlesnake x-y coords to i-j index-tuples used by a_star()."""
     path = a_star(grid, (start.y, start.x), (goal.y, goal.x))
     if path is None:
-        return None, np.inf
+        return None, 9999999
 
     next_pos = path[1]
     result_direction = Direction.from_board_delta((next_pos[1] - start.x, next_pos[0] - start.y))
     return result_direction, len(path) 
 
-def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> List[Tuple[int, int]]:
+def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> List[Tuple[int, int]] | None:
     h, w = grid.shape
     open_set, g_score, came_from = [(0, start)], {start: 0}, {}
 

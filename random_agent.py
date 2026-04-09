@@ -35,6 +35,7 @@ class RandomAgent(BaseAgent):
     def move(self, game_state: GameState) -> MoveAction:
         """move is called on every turn and returns your next move"""
         head = game_state.you.head
+        assert head is not None
 
         # build an obstacle map
         obstacle_map = get_obstacle_map(game_state)
