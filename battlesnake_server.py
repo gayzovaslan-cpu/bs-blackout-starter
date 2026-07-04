@@ -18,7 +18,7 @@ def start_server(agent: BaseAgent, port):
     def on_info():
         # TIP: If you open your Battlesnake URL in browser you should see this data
         data = {
-
+            "apiversion": "1",
             "author": agent.get_author(),
             "color": agent.get_color(),
         }
