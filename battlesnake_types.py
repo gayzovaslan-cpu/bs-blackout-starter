@@ -36,7 +36,7 @@ class EliminationEvent(BaseModel):
 # Snake Model
 # ---------------------------------------------------------
 class SnakeCustomizations(BaseModel):
-    # Исправлено: игра присылает строку ("#32cd32"), но мы разрешаем и Tuple, если это нужно вашей логике
+    # Исправлен: игра присылает строку ("#32cd32"), но мы разрешаем и Tuple, если это нужно вашей логике
     color: Union[str, Tuple[int, int, int]]
     head: Optional[str] = None
     tail: Optional[str] = None
