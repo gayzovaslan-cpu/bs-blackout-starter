@@ -158,7 +158,7 @@ def a_star_wrapper(grid: np.ndarray, start: Point, goal: Point) -> tuple[Directi
 def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> List[Tuple[int, int]] | None:
     h, w = grid.shape
 
-    # Защита: если цель за пределами карты или является препятствием
+    # Исправлено: Корректная проверка границ для строк и столбцов
     if goal[0] < 0 or goal[0] >= h or goal[1] < 0 or goal[1] >= w:
         return None
     if grid[goal[0], goal[1]] and start != goal:
@@ -182,6 +182,7 @@ def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> L
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             neighbor = (r + dr, c + dc)
 
+            # Исправлено: Корректная проверка соседей
             if not (0 <= neighbor[0] < h and 0 <= neighbor[1] < w):
                 continue
             if grid[neighbor[0], neighbor[1]] and neighbor != goal:
@@ -191,8 +192,26 @@ def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> L
             if neighbor not in g_score or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
-                # Манхэттенское расстояние в качестве эвристики
+                # Манхэттенское расстояние
                 f_score = tentative_g + abs(neighbor[0] - goal[0]) + abs(neighbor[1] - goal[1])
                 heapq.heappush(open_set, (f_score, neighbor))
 
     return None
+
+
+if __name__ == "__main__":
+    import sys
+    import os
+    from battlesnake_server import start_server
+
+    agent = HungryAgent()
+
+    # Исправлено: Сначала проверяем переменную окружения Render, затем аргументы CLI
+    if "PORT" in os.environ:
+        port = int(os.environ["PORT"])
+    elif len(sys.argv) > 1:
+        port = int(sys.argv[1])
+    else:
+        port = 8000
+
+    start_server(agent=agent, port=port)
