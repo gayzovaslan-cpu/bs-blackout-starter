@@ -28,6 +28,35 @@ def get_vision_mask(width: int, height: int, center: Point, radius: int) -> np.n
     return dist_sq <= radius
 
 
+def count_free_space(grid: np.ndarray, start_r: int, start_c: int) -> int:
+    """
+    Считает количество свободных связанных клеток с помощью быстрого BFS.
+    """
+    h, w = grid.shape
+    if not (0 <= start_r < h and 0 <= start_c < w) or grid[start_r, start_c]:
+        return 0
+
+    visited = np.zeros_like(grid, dtype=bool)
+    queue = [(start_r, start_c)]
+    visited[start_r, start_c] = True
+    count = 0
+
+    head_idx = 0
+    while head_idx < len(queue):
+        r, c = queue[head_idx]
+        head_idx += 1
+        count += 1
+
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < h and 0 <= nc < w:
+                if not grid[nr, nc] and not visited[nr, nc]:
+                    visited[nr, nc] = True
+                    queue.append((nr, nc))
+
+    return count
+
+
 # ---------------------------------------------------------
 # Battlesnake Agent Implementation
 # ---------------------------------------------------------
@@ -55,15 +84,15 @@ class HungryAgent(BaseAgent):
 
     def move(self, game_state: GameState) -> MoveAction:
         """move is called on every turn and returns your next move"""
-        # Безопасное получение состояния игры
         if game_state.game.id not in self.agent_states:
             self.agent_states[game_state.game.id] = AgentState(possible_food=[])
 
         agent_state = self.agent_states[game_state.game.id]
         head = game_state.you.head
         assert head is not None
+        my_length = game_state.you.length
 
-        # ИСПРАВЛЕНИЕ 1: Безопасная работа с радиусом видимости (для обычного сайта и Blackout)
+        # Работа с радиусом видимости
         try:
             view_radius = game_state.game.ruleset.settings.viewRadius
         except AttributeError:
@@ -73,67 +102,57 @@ class HungryAgent(BaseAgent):
             vision_mask = get_vision_mask(width=game_state.board.width, height=game_state.board.height, center=head,
                                           radius=view_radius)
             updated_food = []
-            # сохраняем еду, которую сейчас не видим из-за тумана
             for food in agent_state.possible_food:
                 if not vision_mask[food.y, food.x]:
                     updated_food.append(food)
-            # добавляем видимую еду
             visible_food = game_state.board.food
             for food in visible_food:
                 if food not in updated_food:
                     updated_food.append(food)
             agent_state.possible_food = updated_food
         else:
-            # Если тумана войны нет (обычный сайт), просто берем всю еду с поля
             agent_state.possible_food = game_state.board.food
 
-        # build an obstacle map
         obstacle_map = get_obstacle_map(game_state)
 
-        # use A* to find closest food and the required move
+        # --- НОВАЯ СТРАТЕГИЯ: Считаем свободное место вокруг головы ---
+        move_space = {}
+        for d in Direction:
+            dx, dy = d.board_delta
+            next_x, next_y = head.x + dx, head.y + dy
+            if 0 <= next_x < game_state.board.width and 0 <= next_y < game_state.board.height:
+                move_space[d] = count_free_space(obstacle_map, next_y, next_x)
+            else:
+                move_space[d] = 0
+
+        # Ищем еду через A*, отсекая ловушки
         result_direction = None
         min_distance = float('inf')
         for food in agent_state.possible_food:
             direction, length = a_star_wrapper(obstacle_map, head, food)
-            if length < min_distance and direction is not None:
-                result_direction = direction
-                min_distance = length
+            if direction is not None and length < min_distance:
+                # Идем к еде, только если там достаточно места для маневра
+                if move_space.get(direction, 0) >= my_length:
+                    result_direction = direction
+                    min_distance = length
 
-        # ИСПРАВЛЕНИЕ 2: Безопасное следование за хвостом (если хвост скрыт туманом)
+        # Фолбэк 1: Преследование хвоста (тоже с проверкой места)
         if result_direction is None and game_state.you.body:
             tail = game_state.you.body[-1]
             if tail is not None:
-                result_direction, _ = a_star_wrapper(obstacle_map, head, tail)
+                direction, _ = a_star_wrapper(obstacle_map, head, tail)
+                if direction is not None and move_space.get(direction, 0) >= my_length:
+                    result_direction = direction
 
-        # second fallback (if tail is unreachable): random move
+        # Фолбэк 2: Умный выбор направления с максимальным пространством
         if result_direction is None:
-            result_direction = self.random_fallback_move(game_state, obstacle_map)
+            safe_moves = [d for d, space in move_space.items() if space > 0]
+            if safe_moves:
+                result_direction = max(safe_moves, key=lambda d: move_space[d])
+            else:
+                result_direction = Direction.UP
 
         return MoveAction(move=result_direction)
-
-    def random_fallback_move(self, game_state: GameState, obstacle_map: np.ndarray) -> Direction:
-        head = game_state.you.head
-        assert head is not None
-        clear_directions = []
-        for d in Direction:
-            # ИСПРАВЛЕНИЕ 3: Исправлено обращение к d.dx и d.dy (в оригинале Direction они возвращали tuple)
-            dx, dy = d.board_delta
-
-            # check out-of-bounds
-            if head.x + dx < 0 or head.x + dx >= game_state.board.width:
-                continue
-            if head.y + dy < 0 or head.y + dy >= game_state.board.height:
-                continue
-
-            # check for obstacles (i.e., snake parts)
-            if obstacle_map[head.y + dy, head.x + dx]:
-                continue
-
-            clear_directions.append(d)
-
-        result_direction = clear_directions[
-            np.random.choice(len(clear_directions))] if clear_directions else Direction.UP
-        return result_direction
 
     def end(self, game_state: GameState):
         """end is called when the battlesnake finishes a game"""
@@ -158,7 +177,6 @@ def a_star_wrapper(grid: np.ndarray, start: Point, goal: Point) -> tuple[Directi
 def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> List[Tuple[int, int]] | None:
     h, w = grid.shape
 
-    # Исправлено: Корректная проверка границ для строк и столбцов
     if goal[0] < 0 or goal[0] >= h or goal[1] < 0 or goal[1] >= w:
         return None
     if grid[goal[0], goal[1]] and start != goal:
@@ -182,7 +200,6 @@ def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> L
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             neighbor = (r + dr, c + dc)
 
-            # Исправлено: Корректная проверка соседей
             if not (0 <= neighbor[0] < h and 0 <= neighbor[1] < w):
                 continue
             if grid[neighbor[0], neighbor[1]] and neighbor != goal:
@@ -192,7 +209,6 @@ def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> L
             if neighbor not in g_score or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
-                # Манхэттенское расстояние
                 f_score = tentative_g + abs(neighbor[0] - goal[0]) + abs(neighbor[1] - goal[1])
                 heapq.heappush(open_set, (f_score, neighbor))
 
@@ -206,7 +222,6 @@ if __name__ == "__main__":
 
     agent = HungryAgent()
 
-    # Исправлено: Сначала проверяем переменную окружения Render, затем аргументы CLI
     if "PORT" in os.environ:
         port = int(os.environ["PORT"])
     elif len(sys.argv) > 1:
