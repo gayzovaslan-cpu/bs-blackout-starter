@@ -20,7 +20,42 @@ def get_obstacle_map(game_state: GameState):
             obstacle_map[body_part.y, body_part.x] = 1
 
     return obstacle_map
+def get_danger_map(game_state: GameState):
+    """
+    Возвращает карту клеток, куда может сходить
+    голова более длинной (или равной) змеи.
+    """
+    h = game_state.board.height
+    w = game_state.board.width
 
+    danger = np.zeros((h, w), dtype=bool)
+
+    my_length = game_state.you.length
+
+    for snake in game_state.board.snakes:
+
+        if snake.id == game_state.you.id:
+            continue
+
+        if snake.head is None:
+            continue
+
+        # коротких змей не боимся
+        if snake.length < my_length:
+            continue
+
+        x = snake.head.x
+        y = snake.head.y
+
+        for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
+
+            nx = x + dx
+            ny = y + dy
+
+            if 0 <= nx < w and 0 <= ny < h:
+                danger[ny, nx] = True
+
+    return danger
 
 def get_vision_mask(width: int, height: int, center: Point, radius: int) -> np.ndarray:
     y, x = np.ogrid[:height, :width]
@@ -114,6 +149,7 @@ class HungryAgent(BaseAgent):
             agent_state.possible_food = game_state.board.food
 
         obstacle_map = get_obstacle_map(game_state)
+        danger_map = get_danger_map(game_state)
 
         # --- НОВАЯ СТРАТЕГИЯ: Считаем свободное место вокруг головы ---
         move_space = {}
@@ -129,7 +165,13 @@ class HungryAgent(BaseAgent):
         result_direction = None
         min_distance = float('inf')
         for food in agent_state.possible_food:
-            direction, length = a_star_wrapper(obstacle_map, head, food)
+            direction, length = a_star_wrapper(
+                obstacle_map,
+                danger_map,
+                head,
+                food
+            )
+
             if direction is not None and length < min_distance:
                 # Идем к еде, только если там достаточно места для маневра
                 if move_space.get(direction, 0) >= my_length:
@@ -140,7 +182,13 @@ class HungryAgent(BaseAgent):
         if result_direction is None and game_state.you.body:
             tail = game_state.you.body[-1]
             if tail is not None:
-                direction, _ = a_star_wrapper(obstacle_map, head, tail)
+                direction, _ = a_star_wrapper(
+                    obstacle_map,
+                    danger_map,
+                    head,
+                    tail
+                )
+
                 if direction is not None and move_space.get(direction, 0) >= my_length:
                     result_direction = direction
 
@@ -150,7 +198,7 @@ class HungryAgent(BaseAgent):
             if safe_moves:
                 result_direction = max(safe_moves, key=lambda d: move_space[d])
             else:
-                result_direction = Direction.UP
+                result_direction = Direction.UP  # ВОЗ ЗДЕСЬ ВОТ АГЕНТ УЖЕ ТОЧНО В СЕБЯ ВРЕЖЕТСЯ
 
         return MoveAction(move=result_direction)
 
@@ -163,9 +211,13 @@ class HungryAgent(BaseAgent):
 # ---------------------------------------------------------
 # A* Algorithm
 # ---------------------------------------------------------
-def a_star_wrapper(grid: np.ndarray, start: Point, goal: Point) -> tuple[Direction | None, int]:
+def a_star_wrapper(grid,danger_map,start,goal):
     """Converts from battlesnake x-y coords to i-j index-tuples used by a_star()."""
-    path = a_star(grid, (start.y, start.x), (goal.y, goal.x))
+    path = a_star(grid, danger_map,
+        (start.y, start.x),
+        (goal.y, goal.x)
+    )
+
     if path is None or len(path) < 2:
         return None, 9999999
 
@@ -174,7 +226,7 @@ def a_star_wrapper(grid: np.ndarray, start: Point, goal: Point) -> tuple[Directi
     return result_direction, len(path)
 
 
-def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> List[Tuple[int, int]] | None:
+def a_star(grid, danger_map, start, goal):
     h, w = grid.shape
 
     if goal[0] < 0 or goal[0] >= h or goal[1] < 0 or goal[1] >= w:
@@ -205,7 +257,12 @@ def a_star(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> L
             if grid[neighbor[0], neighbor[1]] and neighbor != goal:
                 continue
 
-            tentative_g = g_score[current] + 1
+            move_cost = 1
+
+            if danger_map[neighbor[0], neighbor[1]]:
+                move_cost = 20
+
+            tentative_g = g_score[current] + move_cost
             if neighbor not in g_score or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
